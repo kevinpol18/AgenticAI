@@ -1,2 +1,2 @@
 # AgenticAI
-All of the projects from the UDacity Agentic AI Nanodegree
+All of my projects from the UDacity Agentic AI Nanodegree
