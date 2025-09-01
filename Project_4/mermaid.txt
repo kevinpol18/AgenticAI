@@ -1,0 +1,50 @@
+flowchart TD
+  A[Request received] --> ORCH[Orchestration Agent]
+
+  %% Extraction
+  ORCH --> EXTRACT[Extraction Agent]
+  EXTRACT -->|input raw request text| EXTRACT_OUT[ParsedRequest json]
+
+  %% Catalog matching and unit conversion
+  EXTRACT_OUT --> MATCHER[Catalog Matcher deterministic]
+  MATCHER -->|calls convert units| CONVERT_TOOL[convert_units_tool\npurpose convert customer units to base units\nuses helper convert_units]
+  MATCHER -->|calls catalog lookup| CATALOG_TOOL[get_catalog_matches_tool\npurpose return top k inventory candidates\nuses helper get_catalog_matches]
+  MATCHER -->|output| MATCH_OUT[Normalized items and unknown list]
+
+  %% Clarification branch
+  MATCH_OUT -->|if unknown items| CLAR[Clarification payload to caller]
+  MATCH_OUT -->|if all matched| BUILD[Build Order object]
+
+  %% Inventory
+  BUILD --> INV[Inventory Agent]
+  INV --> CASH_TOOL[get_cash_balance_tool\npurpose get cash balance as of date\nuses helper get_cash_balance]
+  INV --> STOCK_TOOL[get_stock_level_tool\npurpose get current stock for item and date\nuses helper get_stock_level]
+  INV --> SUPP_TOOL[get_supplier_delivery_date_tool\npurpose estimate supplier delivery date\nuses helper get_supplier_delivery_date]
+  INV --> ALL_INV_TOOL[get_all_inventory_items_tool\npurpose list static inventory items\nuses helper get_all_inventory_items]
+  INV -->|output| STOCK_ORDER[StockOrder items maybe empty]
+
+  %% Quoting
+  BUILD --> QUOTE[Quoting Agent]
+  QUOTE --> SEARCH_TOOL[search_quote_history_tool\npurpose retrieve similar past quotes\nuses helper search_quote_history]
+  QUOTE -->|output| QUOTE_OUT[Quote with items totals discount and text]
+
+  %% Transactions
+  STOCK_ORDER --> TX[Transaction Agent]
+  QUOTE_OUT --> TX
+  TX -->|writes| CREATE_TX[create_transaction\npurpose append stock and sales rows in transactions table]
+  TX --> RESP[TransactionResult ids]
+
+  %% Final response
+  RESP --> ORCH
+  QUOTE_OUT --> ORCH
+  ORCH --> RESULT[Return final string total comma quote text comma order json]
+
+  %% Data flow labels
+  EXTRACT_OUT ---|json| MATCHER
+  BUILD ---|Order json| INV
+  BUILD ---|Order json| QUOTE
+  QUOTE_OUT ---|Quote json| TX
+
+  %% Style grouping
+  classDef tool fill:#eef,stroke:#66c,color:#000,stroke-width:1px;
+  class CONVERT_TOOL,CATALOG_TOOL,CASH_TOOL,STOCK_TOOL,SUPP_TOOL,ALL_INV_TOOL,SEARCH_TOOL,CREATE_TX tool;
